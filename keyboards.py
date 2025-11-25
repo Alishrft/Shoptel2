@@ -1,6 +1,6 @@
 from telegram import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 
-WEBAPP_URL = "https://alishrft75.pythonanywhere.com"
+WEBAPP_URL = "https://shoptel2.onrender.com"
 
 
 def main_menu(is_admin=False):
