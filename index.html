@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>فروشگاه</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root { --bg: #f8f9fa; --card: #ffffff; --text: #2d3748; --accent: #764ba2; }
+        body { font-family: 'Tahoma', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 70px 10px 90px; -webkit-tap-highlight-color: transparent; user-select: none; }
+
+        /* نوار دسته */
+        .cat-bar { position: fixed; top: 0; left: 0; right: 0; background: rgba(255,255,255,0.95); padding: 12px; overflow-x: auto; white-space: nowrap; z-index: 100; display: flex; gap: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        .cat-btn { background: transparent; border: 1px solid #ccc; padding: 6px 14px; border-radius: 20px; font-size: 13px; cursor: pointer; }
+        .cat-btn.active { background: var(--accent); color: white; border: none; }
+
+        /* کارت محصول */
+        .card { background: var(--card); border-radius: 16px; padding: 12px; margin-bottom: 12px; display: flex; gap: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.03); }
+        .card img { width: 90px; height: 90px; object-fit: cover; border-radius: 12px; background: #eee; }
+        .info { flex: 1; display: flex; flex-direction: column; justify-content: space-between; }
+        .title { font-weight: bold; font-size: 14px; margin: 0; }
+        .variant-select { width: 100%; padding: 5px; border-radius: 6px; border: 1px solid #ddd; font-size: 11px; margin: 5px 0; }
+        .footer { display: flex; justify-content: space-between; align-items: center; }
+        .price { font-weight: bold; color: var(--accent); font-size: 14px; }
+
+        .stepper { display: flex; align-items: center; background: #f0f0f0; border-radius: 8px; padding: 2px; }
+        .step-btn { width: 28px; height: 28px; background: white; color: var(--accent); border: none; border-radius: 6px; font-size: 16px; cursor: pointer; display: flex; justify-content: center; align-items: center; }
+        .step-btn.add { background: var(--accent); color: white; }
+        .count { font-size: 14px; font-weight: bold; min-width: 24px; text-align: center; }
+        .hidden { display: none !important; }
+
+        /* دکمه شناور */
+        #float-btn { position: fixed; bottom: 20px; left: 20px; right: 20px; background: var(--accent); color: white; padding: 15px; border-radius: 15px; text-align: center; font-weight: bold; box-shadow: 0 5px 15px rgba(0,0,0,0.2); z-index: 900; transform: translateY(200%); transition: 0.3s; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+        #float-btn.show { transform: translateY(0); }
+        .badge { background: rgba(255,255,255,0.2); padding: 2px 8px; border-radius: 5px; font-size: 12px; }
+
+        /* --- پنجره مودال سبد خرید (جدید) --- */
+        #cart-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 2000; display: none; align-items: flex-end; backdrop-filter: blur(2px); }
+        .modal-content { background: #fff; width: 100%; border-top-left-radius: 20px; border-top-right-radius: 20px; max-height: 85%; display: flex; flex-direction: column; animation: slideUp 0.3s; }
+        .modal-header { padding: 15px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; font-weight: bold; }
+        .close-btn { background: none; border: none; font-size: 24px; cursor: pointer; color: #888; }
+        .modal-body { padding: 15px; overflow-y: auto; }
+        .cart-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid #f5f5f5; }
+        .cart-info div { margin-bottom: 4px; }
+        .cart-title { font-weight: bold; font-size: 14px; }
+        .cart-var { font-size: 11px; color: #666; background: #eee; padding: 2px 6px; border-radius: 4px; }
+        .cart-price { color: var(--accent); font-weight: bold; font-size: 13px; }
+
+        .modal-footer { padding: 20px; background: #fff; border-top: 1px solid #eee; }
+        .total-row { display: flex; justify-content: space-between; font-weight: bold; margin-bottom: 15px; font-size: 16px; }
+        .final-btn { width: 100%; background: #27ae60; color: white; padding: 14px; border: none; border-radius: 12px; font-size: 16px; font-weight: bold; cursor: pointer; }
+
+        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        #loading { position: fixed; top:0;left:0;right:0;bottom:0; background:rgba(255,255,255,0.8); z-index:3000; display:none; justify-content:center; align-items:center; font-weight:bold; color:var(--accent); }
+    </style>
+</head>
+<body>
+    <div id="loading">لطفاً صبر کنید...</div>
+
+    <script>
+        const rawData = '{{ products_json | safe }}';
+        const productsData = JSON.parse(rawData);
+        const productsMap = {};
+        productsData.forEach(p => productsMap[p.id] = p);
+    </script>
+
+    <div class="category-bar">
+        <button class="cat-btn active" onclick="filter('all', this)">همه</button>
+        {% for c in categories %}
+            <button class="cat-btn" onclick="filter('{{ c.id }}', this)">{{ c.name }}</button>
+        {% endfor %}
+    </div>
+
+    <div id="list">
+        {% for p in products %}
+        <div class="card product-item" data-cat-id="{{ p.cat_id }}">
+            <img src="{{ p.img }}">
+            <div class="info">
+                <div>
+                    <div class="title">{{ p.title }}</div>
+                    {% if p.variants %}
+                        <select id="var-{{ p.id }}" class="variant-select" onchange="resetCount('{{ p.id }}')">
+                            <option value="0" disabled selected>انتخاب ویژگی...</option>
+                            {% for v in p.variants %}
+                                <option value="{{ v.id }}" data-stock="{{ v.stock }}">{{ v.name }}</option>
+                            {% endfor %}
+                        </select>
+                    {% else %}
+                        <div style="font-size:11px; color:#888; margin-bottom:5px">موجودی: {{ p.stock }}</div>
+                        <input type="hidden" id="stock-{{ p.id }}" value="{{ p.stock }}">
+                    {% endif %}
+                </div>
+                <div class="footer">
+                    <div class="price">{{ "{:,}".format(p.price) }} ت</div>
+                    <div class="stepper">
+                        <button id="m-{{ p.id }}" class="step-btn hidden" onclick="change('{{ p.id }}', -1)">−</button>
+                        <span id="c-{{ p.id }}" class="count hidden">0</span>
+                        <button class="step-btn add" onclick="change('{{ p.id }}', 1)">＋</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div id="float-btn" onclick="openModal()">
+        <span id="badge" class="badge">0 قلم</span>
+        <span>مشاهده سبد خرید 🛒</span>
+    </div>
+
+    <div id="cart-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span>لیست خرید شما</span>
+                <button class="close-btn" onclick="closeModal()">✕</button>
+            </div>
+            <div class="modal-body" id="modal-body">
+                </div>
+            <div class="modal-footer">
+                <div class="total-row">
+                    <span>جمع کل:</span>
+                    <span id="total-price">0 تومان</span>
+                </div>
+                <button class="final-btn" onclick="sendOrder()">✅ ثبت نهایی سفارش</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp; tg.expand(); tg.MainButton.hide();
+        let cart = {}; // { 'pid_vid': qty }
+
+        function filter(cid, btn) {
+            document.querySelectorAll('.cat-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active');
+            document.querySelectorAll('.product-item').forEach(e => e.style.display = (cid=='all'||e.dataset.catId==cid)?'flex':'none');
+        }
+
+        function resetCount(pid) {
+            updateUI(pid);
+        }
+
+        function change(pid, delta) {
+            const select = document.getElementById(`var-${pid}`);
+            let vid = 0, max = 0;
+
+            if (select) {
+                vid = select.value;
+                if (vid == 0) { tg.showPopup({message:"ویژگی را انتخاب کنید"}); return; }
+                max = parseInt(select.options[select.selectedIndex].dataset.stock);
+            } else {
+                max = parseInt(document.getElementById(`stock-${pid}`).value);
+            }
+
+            const key = vid ? `${pid}_${vid}` : `${pid}`;
+            if (!cart[key]) cart[key] = 0;
+
+            if (delta > 0 && cart[key] >= max) { tg.showPopup({message:"موجودی ناکافی"}); return; }
+
+            cart[key] += delta;
+            if (cart[key] <= 0) delete cart[key];
+
+            tg.HapticFeedback.impactOccurred('light');
+            updateUI(pid);
+
+            // اگر مودال باز است، رفرش کن
+            if (document.getElementById('cart-modal').style.display === 'flex') renderModal();
+        }
+
+        function updateUI(pid) {
+            let total = 0;
+            Object.keys(cart).forEach(k => { if(k.startsWith(pid)) total += cart[k]; });
+
+            const cEl = document.getElementById(`c-${pid}`);
+            const mEl = document.getElementById(`m-${pid}`);
+
+            if(cEl) {
+                cEl.innerText = total;
+                if(total>0) { cEl.classList.remove('hidden'); mEl.classList.remove('hidden'); }
+                else { cEl.classList.add('hidden'); mEl.classList.add('hidden'); }
+            }
+
+            // آپدیت دکمه شناور
+            const allTotal = Object.values(cart).reduce((a,b)=>a+b,0);
+            const btn = document.getElementById('float-btn');
+            document.getElementById('badge').innerText = allTotal + " قلم";
+            if(allTotal>0) btn.classList.add('show'); else btn.classList.remove('show');
+        }
+
+        // --- توابع مودال ---
+        function openModal() {
+            renderModal();
+            document.getElementById('cart-modal').style.display = 'flex';
+            tg.BackButton.show();
+            tg.BackButton.onClick(closeModal);
+        }
+
+        function closeModal() {
+            document.getElementById('cart-modal').style.display = 'none';
+            tg.BackButton.hide();
+            tg.BackButton.offClick(closeModal);
+        }
+
+        function renderModal() {
+            const container = document.getElementById('modal-body');
+            container.innerHTML = '';
+            let sum = 0;
+
+            if (Object.keys(cart).length === 0) {
+                container.innerHTML = '<p style="text-align:center; color:#888; margin-top:20px;">سبد خالی است</p>';
+                closeModal();
+                return;
+            }
+
+            Object.keys(cart).forEach(key => {
+                const [pid, vid] = key.split('_');
+                const qty = cart[key];
+                const p = productsMap[pid];
+                let vName = "";
+
+                if (vid && vid!='undefined') {
+                    const v = p.variants.find(x => x.id == vid);
+                    if (v) vName = v.name;
+                }
+
+                sum += p.price * qty;
+
+                const item = document.createElement('div');
+                item.className = 'cart-item';
+                item.innerHTML = `
+                    <div class="cart-info">
+                        <div class="cart-title">${p.title}</div>
+                        ${vName ? `<span class="cart-var">${vName}</span>` : ''}
+                        <div class="cart-price">${(p.price*qty).toLocaleString()} ت</div>
+                    </div>
+                    <div class="stepper">
+                        <button class="step-btn" onclick="change('${pid}', -1)">−</button>
+                        <span class="count">${qty}</span>
+                        <button class="step-btn add" onclick="changeWithVar('${pid}', '${vid}', 1)">＋</button>
+                    </div>
+                `;
+                container.appendChild(item);
+            });
+
+            document.getElementById('total-price').innerText = sum.toLocaleString() + " تومان";
+        }
+
+        // تابع کمکی برای اضافه کردن در مودال (چون در مودال سلکت باکس نداریم)
+        function changeWithVar(pid, vid, delta) {
+             // شبیه‌سازی انتخاب سلکت باکس
+             if (vid && vid != 'undefined') {
+                 const sel = document.getElementById(`var-${pid}`);
+                 if (sel) sel.value = vid;
+             }
+             change(pid, delta);
+        }
+
+        function sendOrder() {
+            if (Object.keys(cart).length === 0) return;
+            document.getElementById('loading').style.display = 'flex';
+
+            const items = Object.keys(cart).map(k => {
+                const p = k.split('_');
+                return {id: p[0], vid: p[1]||0, qty: cart[k]};
+            });
+
+            fetch('/submit_order', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({user_id: tg.initDataUnsafe.user.id, items: items})
+            }).then(r=>r.json()).then(d=>{
+                if(d.status=='success') tg.close();
+                else { tg.showPopup({message:d.message}); document.getElementById('loading').style.display='none'; }
+            });
+        }
+    </script>
+</body>
+</html>
